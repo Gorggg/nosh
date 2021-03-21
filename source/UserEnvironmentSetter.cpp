@@ -7,7 +7,7 @@ For copyright and licensing terms, see the file named COPYING.
 #include <string>
 #include <cstring>
 #include <cstdlib>
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #include <sys/types.h>
 #include <login_cap.h>
 #endif
@@ -16,15 +16,19 @@ For copyright and licensing terms, see the file named COPYING.
 #include "UserEnvironmentSetter.h"
 #include "ProcessEnvironment.h"
 
-// OpenBSD requires const incorrectness bodges.
-#if defined(__OpenBSD__)
+// OpenBSD and NetBSD require const incorrectness bodges.
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 namespace {
 inline login_cap_t * login_getclass(const char * c) { return login_getclass(const_cast<char *>(c)); }
+#if defined(__OpenBSD__)
 inline const char * login_getcapstr(login_cap_t * d, const char * cap, const char * def, const char * err) { return login_getcapstr(d, const_cast<char *>(cap), const_cast<char *>(def), const_cast<char *>(err)); }
+#elif defined(__NetBSD__)
+inline const char * login_getcapstr(login_cap_t * d, const char * cap, const char * def, const char * err) { return login_getcapstr(d, cap, const_cast<char *>(def), const_cast<char *>(err)); }
+#endif
 }
 #endif
 
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 
 #if !defined(LOGIN_DEFROOTCLASS)
 #define LOGIN_DEFROOTCLASS "root"
@@ -52,7 +56,7 @@ login_getsystemclass(
 	return login_getclass(c);
 }
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 // OpenBSD lacks this, too.
 inline login_cap_t * login_getuserclass(const passwd *) { return 0; }
 #endif
@@ -104,7 +108,7 @@ UserEnvironmentSetter::LoginDBOwner::getcapstr(
 	if (!d) return err;
 #endif
 	const char * r(login_getcapstr(d, cap, def, err));
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	// FreeBSD's and OpenBSD's login_getcapstr() leaks memory, only sometimes.
 	if (def != r && err != r && r) {
 		res = r;
@@ -307,7 +311,7 @@ UserEnvironmentSetter::apply (
 			// But it inverts this order, making "local" the lowest priority.
 			// We give "local" data files priority over the operating system data files, as the XDG Desktop Specification does.
 			envs.set("XDG_DATA_DIRS", "/usr/local/share:/usr/share:/share");
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 			envs.set("XDG_CONFIG_DIRS", "/usr/local/etc/xdg");
 #else
 			// The default of /etc/xdg applies to everyone else.

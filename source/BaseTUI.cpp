@@ -11,12 +11,6 @@ For copyright and licensing terms, see the file named COPYING.
 #include <sys/ioctl.h>	// for struct winsize
 #include <unistd.h>
 #include <fcntl.h>
-#if defined(__LINUX__) || defined(__linux__)
-#include <ncursesw/curses.h>
-#else
-#include <curses.h>
-#endif
-#include "curses-const-fix.h"	// Must come after curses.h .
 #include <term.h>
 #include "ttyutils.h"
 #include "BaseTUI.h"

@@ -6,7 +6,7 @@
 main="`basename "$1"`"
 objects="main-exec.o builtins-${main}.o"
 libraries="builtins.a utils.a"
-( test _"`uname`" = _"Linux" || test _"`uname`" = _"FreeBSD" ) && crypt=-lcrypt
+( test _"`uname`" = _"Linux" || test _"`uname`" = _"FreeBSD" || test _"`uname`" = _"NetBSD" ) && crypt=-lcrypt
 # Needed because emergency-login can be run before filesystems are mounted.
 test _"`uname`" = _"FreeBSD" && static="-static"
 redo-ifchange link ${objects} ${libraries}

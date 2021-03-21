@@ -23,7 +23,11 @@ set_event (
 	unsigned short flags,
 	unsigned int fflags,
 	intptr_t data,
+#if defined(__NetBSD__)
+	intptr_t udata
+#else
 	void *udata
+#endif
 ) {
 	EV_SET(ev, ident, filter, flags, fflags, data, udata);
 }
@@ -37,7 +41,11 @@ append_event (
 	unsigned short flags,
 	unsigned int fflags,
 	intptr_t data,
+#if defined(__NetBSD__)
+	intptr_t udata
+#else
 	void *udata
+#endif
 ) {
 	struct kevent ev;
 	set_event(&ev, ident, filter, flags, fflags, data, udata);

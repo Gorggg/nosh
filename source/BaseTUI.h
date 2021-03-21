@@ -6,6 +6,13 @@ For copyright and licensing terms, see the file named COPYING.
 #if !defined(INCLUDE_BASETUI_H)
 #define INCLUDE_BASETUI_H
 
+#if defined(__LINUX__) || defined(__linux__)
+#include <ncursesw/curses.h>
+#else
+#include <curses.h>
+#endif
+#include "curses-const-fix.h"	// Must come after curses.h .
+
 struct BaseTUI {
 	BaseTUI();
 	virtual ~BaseTUI();
@@ -18,7 +25,7 @@ struct BaseTUI {
 	void set_refresh_needed() { refresh_needed = true; }
 	bool resize_needed() const { return pending_resize_event; }
 protected:
-	struct _win_st * window;
+	WINDOW * window;
 	virtual void redraw() = 0;
 	virtual void unicode_keypress(wint_t) = 0;
 	virtual void ncurses_keypress(wint_t) = 0;

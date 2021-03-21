@@ -17,6 +17,10 @@ For copyright and licensing terms, see the file named COPYING.
 #include <stdint.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
+#if defined(__NetBSD__)
+#include <sys/sysctl.h>
+#endif
 #include "utils.h"
 //#include "tai64utils.h"
 #include "ProcessEnvironment.h"
@@ -105,6 +109,10 @@ NullableTAI64N::boot(
 	timespec uptime;
 #if defined(__LINUX__) || defined(__linux__)
 	clock_gettime(CLOCK_BOOTTIME, &uptime);
+#elif defined(__NetBSD__)
+	int mib[2] = { CTL_KERN, KERN_BOOTTIME };
+	std::size_t uptime_size(sizeof uptime);
+	sysctl(mib, 2, &uptime, &uptime_size, NULL, 0);
 #else
 	clock_gettime(CLOCK_UPTIME, &uptime);
 #endif
@@ -248,7 +256,11 @@ invalid_timestamp:
 				r.reset();
 				return;
 			}
+#if defined(__NetBSD__)
+			r.set(envs, b.st_birthtime, b.st_birthtimensec);
+#else
 			r.set(envs, b.st_birthtim);
+#endif
 			return;
 #endif
 		} else

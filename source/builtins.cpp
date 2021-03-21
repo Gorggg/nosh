@@ -54,7 +54,7 @@ internal_execve (
 	const char * const * args,
 	const char * const * envs
 ) {
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 	execve(prog, const_cast<char **>(args), const_cast<char **>(envs));
 #elif defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
 	const int fd(open_non_interpreted_exec_at(AT_FDCWD, prog));
@@ -77,7 +77,6 @@ internal_execve (
 }
 
 /// A safer form of execvp() that doesn't include the current directory in the default search path.
-static inline
 void
 safe_execvp (
 	const char * prog,

@@ -15,7 +15,7 @@ For copyright and licensing terms, see the file named COPYING.
 #include <sys/ioctl.h>
 #if defined(__LINUX__) || defined(__linux__)
 #include <linux/vt.h>
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined (__NetBSD__)
 #include <dev/wscons/wsdisplay_usl_io.h>
 #else
 #include <sys/consio.h>
@@ -153,21 +153,29 @@ console_multiplexor_control [[gnu::noreturn]] (
 				throw EXIT_FAILURE;
 			}
 			if ("n" == command || "next" == command) {
-#if defined(__FreeBSD__) || defined(__DragonFly__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 				int index;
 				if (0 <= ioctl(vt_fd.get(), VT_GETACTIVE, &index))
 					ioctl(vt_fd.get(), VT_ACTIVATE, index + 1);
+#elif defined (__LINUX__) || defined (__linux__)
+				struct vt_stat vt_stats;
+				if (0 <= ioctl(vt_fd.get(), VT_GETSTATE, &vt_stats))
+					ioctl(vt_fd.get(), VT_ACTIVATE, vt_stats.v_active + 1);
 #else
-				;	/// \bug FIXME: Implement next action
+#error "Don't know how to switch VTs for your operating system"
 #endif
 			} else
 			if ("p" == command || "prev" == command) {
-#if defined(__FreeBSD__) || defined(__DragonFly__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 				int index;
 				if (0 <= ioctl(vt_fd.get(), VT_GETACTIVE, &index))
 					ioctl(vt_fd.get(), VT_ACTIVATE, index - 1);
+#elif defined(__LINUX__) || defined(__linux__)
+				struct vt_stat vt_stats;
+				if (0 <= ioctl(vt_fd.get(), VT_GETSTATE, &vt_stats))
+					ioctl(vt_fd.get(), VT_ACTIVATE, vt_stats.v_active - 1);
 #else
-				;	/// \bug FIXME: Implement previous action
+#error "Don't know how to switch VTs for your operating system"
 #endif
 			} else
 			if ("s" == command || "sel" == command)

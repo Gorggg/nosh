@@ -12,7 +12,7 @@ For copyright and licensing terms, see the file named COPYING.
 #include <linux/fb.h>
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
 #include <sys/fbio.h>
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 #include <dev/wscons/wsconsio.h>
 #else
 #	error "Don't know how to query your framebuffer device."
@@ -40,7 +40,7 @@ public:
 	unsigned short query_xres() const { return mode_info.vi_width; }
 	unsigned short query_yres() const { return mode_info.vi_height; }
 	unsigned short query_depth() const { return mode_info.vi_depth; }
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 	std::size_t query_size() const;
 	unsigned short query_stride() const { return stride; }
 	unsigned short query_xres() const { return mode_info.width; }
@@ -62,7 +62,7 @@ protected:
 	int old_video_mode, video_mode;
 	video_adapter_info_t adapter_info;
 	video_info_t mode_info;
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 	int old_video_mode, video_mode, stride;
 	wsdisplay_fbinfo mode_info;
 #else

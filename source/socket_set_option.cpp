@@ -23,7 +23,7 @@ socket_set_boolean_option (
 	return setsockopt(s, l, n, &optval, sizeof optval);
 }
 
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__)
 static inline
 int
 socket_set_boolean_option_special (
@@ -51,17 +51,19 @@ socket_set_bind_to_any (
 #elif defined(__LINUX__) || defined(__linux__)
 	static_cast<void>(info);	// Silence a compiler warning.
 	return socket_set_boolean_option(s, SOL_IP, IP_FREEBIND, v);
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 	switch (info.ai_family) {
 		case AF_INET:	return socket_set_boolean_option_special(s, IPPROTO_IPV4, IP_BINDANY, v);
 		case AF_INET6:	return socket_set_boolean_option(s, IPPROTO_IPV6, IP_BINDANY, v);
 	}
 	return errno = EINVAL, -1;
-#else
+#elif defined(IP_BINDANY)
 	switch (info.ai_family) {
 		case AF_INET:	return socket_set_boolean_option(s, IPPROTO_IPV4, IP_BINDANY, v);
 		case AF_INET6:	return socket_set_boolean_option(s, IPPROTO_IPV6, IP_BINDANY, v);
 	}
+	return errno = EINVAL, -1;
+#else
 	return errno = EINVAL, -1;
 #endif
 }

@@ -17,7 +17,7 @@ namespace {
 
 	const char volatile_filename[] = "/run/machine-id";
 	const char non_volatile_filename[] = "/etc/machine-id";
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	const char volatile_hostuuid_filename[] = "/run/hostid";
 	const char non_volatile_hostuuid_filename[] = "/etc/hostid";
 	const char non_volatile_local_etc_machineid_filename[] = "/usr/local/etc/machine-id";
@@ -162,7 +162,7 @@ write_one_line_machine_id (
 	i.put('\n');
 }
 
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 inline
 void
 write_one_line_hostuuid (
@@ -205,7 +205,7 @@ write_or_bind_mount_machine_id (
 #endif
 }
 
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 inline
 void
 write_or_bind_mount_hostuuid (
@@ -277,13 +277,21 @@ inline
 bool
 read_host_uuid ()
 {
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	std::size_t siz(0);
+#if defined(__NetBSD__)
+	if (0 > sysctlbyname("machdep.dmi.system-uuid", 0, &siz, 0, 0)) return false;
+#else
 	if (0 > sysctl(host_uuid_oid, sizeof host_uuid_oid/sizeof *host_uuid_oid, 0, &siz, 0, 0)) return false;
+#endif
 	if (37 > siz) return false;
 	char * buf(static_cast<char *>(malloc(siz)));
 	if (!buf) return false;
+#if defined(__NetBSD__)
+	if (0 > sysctlbyname("machdep.dmi.system-uuid", buf, &siz, 0, 0)) {
+#else
 	if (0 > sysctl(host_uuid_oid, sizeof host_uuid_oid/sizeof *host_uuid_oid, buf, &siz, 0, 0)) {
+#endif
 		free(buf);
 		return false;
 	}
@@ -302,12 +310,16 @@ void
 write_host_uuid (
 	const char * prog
 ) {
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	char * buf(0);
 	uint32_t status;
 	const uuid_t guid(uuid_to_guid(machine_id::the_machine_id));
 	uuid_to_string(&guid, &buf, &status);
+#if defined(__NetBSD__)
+	if (0 > sysctlbyname("machdep.dmi.system-uuid", 0, 0, buf, std::strlen(buf) + 1)) {
+#else
 	if (0 > sysctl(host_uuid_oid, sizeof host_uuid_oid/sizeof *host_uuid_oid, 0, 0, buf, std::strlen(buf) + 1)) {
+#endif
 		const int error(errno);
 		std::fprintf(stderr, "%s: ERROR: %s: %s\n", prog, "kern.hostuuid", std::strerror(error));
 	}

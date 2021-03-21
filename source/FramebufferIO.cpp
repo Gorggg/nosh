@@ -39,7 +39,7 @@ FramebufferIO::save(
 		std::fprintf(stderr, "%s: FATAL: %s: %s\n", prog, fb_filename, std::strerror(error));
 		throw EXIT_FAILURE;
 	}
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 	if (0 > ioctl(fd, WSDISPLAYIO_GMODE, &old_video_mode)) {
 		const int error(errno);
 		std::fprintf(stderr, "%s: FATAL: %s: %s\n", prog, fb_filename, std::strerror(error));
@@ -117,7 +117,7 @@ FramebufferIO::set_graphics_mode(
 		std::fprintf(stderr, "%s: FATAL: %s: %s\n", prog, fb_filename, "Not a packed/direct colour device.");
 		throw EXIT_FAILURE;
 	}
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 	video_mode = WSDISPLAYIO_MODE_DUMBFB;
 #if defined(WSDISPLAYIO_SGFXMODE)
 	static const wsdisplayio_gfx_mode modes[] = {
@@ -171,7 +171,7 @@ FramebufferIO::restore()
 	ioctl(fd, FBIOPUT_VSCREENINFO, &old_variable_info);
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
 	ioctl(fd, FBIO_SETMODE, &old_video_mode);
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 #if defined(WSDISPLAYIO_SGFXMODE)
 	const wsdisplayio_gfx_mode mode = { 640, 480, 8 };
 	ioctl(fd, WSDISPLAYIO_SETGFXMODE, &m);
@@ -182,7 +182,7 @@ FramebufferIO::restore()
 #endif
 }
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 std::size_t 
 FramebufferIO::query_size() const
 {

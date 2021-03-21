@@ -42,6 +42,13 @@ dirname_of (
 ) ;
 extern
 void
+safe_execvp (
+	const char * prog,
+	const char * const * args,
+	ProcessEnvironment & envs
+) ;
+extern
+void
 exec_terminal (
 	const char * & prog,
 	const char * & next_prog,

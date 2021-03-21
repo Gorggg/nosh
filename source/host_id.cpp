@@ -64,7 +64,7 @@ write_volatile_hostid (
 	const char * prog,
 	uint32_t hostid
 ) {
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	int oid[2] = {CTL_KERN, KERN_HOSTID};
 #if !defined(__OpenBSD__)
 	const 

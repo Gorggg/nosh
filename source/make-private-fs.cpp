@@ -100,8 +100,12 @@ make_private_fs (
 				FROM,			{ name, std::strlen(name) + 1 },
 #if defined(__LINUX__) || defined(__linux__)
 				FSTYPE,			MAKE_IOVEC(""),
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 				FSTYPE,			MAKE_IOVEC("nullfs"),
+#elif defined(__NetBSD__)
+				FSTYPE,			MAKE_IOVEC("null"),
+#else
+#error "Don't know how to create bind mounts on your operating system."
 #endif
 			};
 
@@ -130,7 +134,7 @@ make_private_fs (
 			// It's this, or have the whole nsswitch mechanism loaded into process #1 just to read /etc/groups.
 			MAKE_IOVEC("gid"),	MAKE_IOVEC("5"),
 		};
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 		static const struct iovec dev[] = {
 			FSTYPE,			MAKE_IOVEC("devfs"),
 			FSPATH,			MAKE_IOVEC("/dev"),
@@ -139,6 +143,19 @@ make_private_fs (
 			FSTYPE,			MAKE_IOVEC("fdescfs"),
 			FSPATH,			MAKE_IOVEC("/dev/fd"),
 		};
+#elif defined(__NetBSD__)
+		static const struct iovec dev[] = {
+			FSTYPE,				MAKE_IOVEC("tmpfs"),
+			FSPATH,				MAKE_IOVEC("/dev"),
+			MAKE_IOVEC("m"),		MAKE_IOVEC("0755"),
+			MAKE_IOVEC("s"),		MAKE_IOVEC("10M"),
+		};
+		static const struct iovec pty[] = {
+			FSTYPE,				MAKE_IOVEC("ptyfs"),
+			FSPATH,				MAKE_IOVEC("/dev/pts"),
+		};
+#else
+#error "Don't know how to create private /dev on your operating system."
 #endif
 
 #define MAKE_DATA(x) # x, const_cast<struct iovec *>(x), sizeof x/sizeof *x
@@ -148,22 +165,27 @@ make_private_fs (
 #if defined(__LINUX__) || defined(__linux__)
 			{	MAKE_DATA(dev),		0U,	MS_NOSUID|MS_STRICTATIME|MS_NOEXEC		},
 			{	MAKE_DATA(pts),		0U,	MS_NOSUID|MS_STRICTATIME|MS_NOEXEC		},
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 			{	MAKE_DATA(dev),		0U,	MNT_NOSUID|MNT_NOEXEC				},
 			{	MAKE_DATA(fds),		0U,	MNT_NOSUID|MNT_NOEXEC				},
+#elif defined (__NetBSD__)
+			{	MAKE_DATA(dev),		0U,	MNT_NOSUID|MNT_NOEXEC				},
+			{	MAKE_DATA(pty),		0U,	MNT_NOSUID|MNT_NOEXEC				},
 #endif
 		};
 
 		const static struct api_symlink symlinks[] = 
 		{
-#if defined(__LINUX__) || defined(__linux__)
+#if defined(__LINUX__) || defined(__linux__) || defined(__NetBSD__)
 			{	1,	"/dev/ptmx",	"pts/ptmx"		},
 			{	0,	"/dev/fd",	"/proc/self/fd"		},
 //			{	0,	"/dev/core",	"/proc/kcore"		},
 			{	0,	"/dev/stdin",	"/proc/self/fd/0"	},
 			{	0,	"/dev/stdout",	"/proc/self/fd/1"	},
 			{	0,	"/dev/stderr",	"/proc/self/fd/2"	},
+#if defined(__LINUX__) || defined(__linux__)
 			{	0,	"/dev/shm",	"/run/shm"		},
+#endif
 #else
 			{	0,	"/dev/urandom",	"random"		},
 			{	0,	"/dev/shm",	"/run/shm"		},
@@ -173,7 +195,7 @@ make_private_fs (
 		const char * device_files[] = {
 			"null",
 			"zero",
-#if defined(__LINUX__) || defined(__linux__)
+#if defined(__LINUX__) || defined(__linux__) || defined(__NetBSD__)
 			"full",
 			"urandom",
 #endif
@@ -236,10 +258,10 @@ make_private_fs (
 			const char * name;
 		} const homedirs[] = {
 			{ true, "/root" },
-#if defined(__LINUX__) || defined(__linux__)
-			{ true, "/home" },
-#else
+#if defined(__FreeBSD__) || defined(__DragonFly__)
 			{ true, "/usr/home" },
+#else
+			{ true, "/home" },
 #endif
 			{ false, "/run/user" },
 		};
@@ -273,8 +295,12 @@ make_private_fs (
 				FROM,			{ name, std::strlen(name) + 1 },
 #if defined(__LINUX__) || defined(__linux__)
 				FSTYPE,			MAKE_IOVEC(""),
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 				FSTYPE,			MAKE_IOVEC("nullfs"),
+#elif defined(__NetBSD__)
+				FSTYPE,			MAKE_IOVEC("null"),
+#else
+#error "Don't know how to create bind mounts on your operating system."
 #endif
 			};
 
@@ -293,8 +319,12 @@ make_private_fs (
 				FROM,			{ name, std::strlen(name) + 1 },
 #if defined(__LINUX__) || defined(__linux__)
 				FSTYPE,			MAKE_IOVEC(""),
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 				FSTYPE,			MAKE_IOVEC("nullfs"),
+#elif defined(__NetBSD__)
+				FSTYPE,			MAKE_IOVEC("null"),
+#else
+#error "Don't know how to create bind mounts on your operating system."
 #endif
 			};
 

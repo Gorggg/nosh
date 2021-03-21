@@ -10,5 +10,7 @@ test _"`uname`" = _"Linux" && uuid=-luuid
 test _"`uname`" = _"Linux" && rt=-lrt
 test _"`uname`" = _"FreeBSD" && util=-lutil
 test _"`uname`" = _"FreeBSD" && static="-static"
+test _"`uname`" = _"NetBSD" && util=-lutil
+test _"`uname`" = _"NetBSD" && static="-static" 
 redo-ifchange link ${objects} ${libraries}
 exec ./link "$3" ${objects} ${libraries} ${uuid} ${rt} ${util} ${static}

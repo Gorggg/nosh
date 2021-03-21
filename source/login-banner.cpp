@@ -13,7 +13,7 @@ For copyright and licensing terms, see the file named COPYING.
 #include <sys/types.h>
 #include <sys/param.h>
 #include <unistd.h>
-#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
+#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined (__NetBSD__)
 #include <utmpx.h>
 #elif defined(__OpenBSD__)
 #include <utmp.h>
@@ -54,7 +54,7 @@ unsigned long
 count_users() 
 {
 	unsigned long count(0);
-#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
+#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined(__NetBSD__)
 	setutxent();
 	while (struct utmpx * u = getutxent()) {
 		if (USER_PROCESS == u->ut_type) 

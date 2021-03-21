@@ -602,7 +602,7 @@ service::enter_state (
 	if (out != STDOUT_FILENO) close(out);
 	if (err != STDERR_FILENO) close(err);
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 	execve(*a, const_cast<char **>(a), const_cast<char **>(envs.data()));
 #else
 	fexecve(fd.get(), const_cast<char **>(a), const_cast<char **>(envs.data()));

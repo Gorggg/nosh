@@ -6,6 +6,7 @@
 #test _"`uname`" = _"FreeBSD" || kqueue="-I /usr/include/kqueue"
 cppflags="-I . ${kqueue}"
 ldflags="-g -pthread"
+(test _"`uname`" = _"NetBSD") && ldflags="$ldflags -L/usr/pkg/lib"
 if type >/dev/null clang++
 then
 	cxx="clang++"

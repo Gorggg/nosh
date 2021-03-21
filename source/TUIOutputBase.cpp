@@ -11,13 +11,7 @@ For copyright and licensing terms, see the file named COPYING.
 #include <cstring>
 #include <sys/ioctl.h>
 #include <termios.h>
-#if defined(__LINUX__) || defined(__linux__)
 #include "ttyutils.h"
-#elif defined(__OpenBSD__)
-#include "ttyutils.h"
-#else
-#include "ttyutils.h"
-#endif
 #include <unistd.h>
 #include "utils.h"
 #include "UnicodeClassification.h"

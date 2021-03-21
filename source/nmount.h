@@ -11,7 +11,7 @@ For copyright and licensing terms, see the file named COPYING.
 #define FSPATH MAKE_IOVEC("fspath")
 
 // These platforms don't supply their own nmount().
-#if defined(__LINUX__) || defined(__linux__) || defined(__OpenBSD__)
+#if defined(__LINUX__) || defined(__linux__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #include <sys/uio.h>
 
 extern "C" int nmount (struct iovec * iov, unsigned int ioc, int flags) ;

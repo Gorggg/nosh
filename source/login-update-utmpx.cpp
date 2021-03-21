@@ -68,18 +68,18 @@ login_update_utmpx [[gnu::noreturn]] (
 #if defined(__LINUX__) || defined(__linux__)
                 u.ut_type = BOOT_TIME;
 		std::strncpy(u.ut_user, "reboot", sizeof u.ut_user);
-		FileDescriptorOwner ufd(open_readwritecreate_at(AT_FDCWD, _PATH_UTMP, 0644));
-		FileDescriptorOwner wfd(open_readwritecreate_at(AT_FDCWD, _PATH_WTMP, 0644));
+		FileDescriptorOwner ufd(open_readwritecreate_at(AT_FDCWD, _PATH_UTMPX, 0644));
+		FileDescriptorOwner wfd(open_readwritecreate_at(AT_FDCWD, _PATH_WTMPX, 0644));
 #elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__NetBSD__)
                 u.ut_type = BOOT_TIME;
 #endif
         } else
         if (0 == std::strcmp("shutdown", command)) {
-#if defined(__LINUX__) || defined(__linux__)
+#if defined(__LINUX__) || defined(__linux__) || defined(__NetBSD__)
                 u.ut_type = RUN_LVL;
 		u.ut_pid = '0';
 		std::strncpy(u.ut_user, "shutdown", sizeof u.ut_user);
-#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__NetBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
                 u.ut_type = SHUTDOWN_TIME;
 #endif
         } else
@@ -103,7 +103,7 @@ login_update_utmpx [[gnu::noreturn]] (
         const utmpx * rc(pututxline(&u));
         const int error(errno);
         endutxent();
-	updwtmpx(_PATH_WTMP, &u);
+	updwtmpx(_PATH_WTMPX, &u);
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
         const utmpx * rc(pututxline(&u));
         const int error(errno);

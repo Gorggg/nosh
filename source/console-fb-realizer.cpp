@@ -30,10 +30,11 @@ For copyright and licensing terms, see the file named COPYING.
 #include <linux/input.h>
 #include <endian.h>
 #include "ttyutils.h"
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 #include <sys/uio.h>
 #include <sys/endian.h>
 #include <termios.h>
+#define HID_USAGE(u) ((u) & 0xffff)
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplay_usl_io.h>
 #include <dev/usb/usb.h>
@@ -2407,7 +2408,7 @@ public:
 protected:
 	const KeyboardMap & map;
 
- };
+};
 
 }
 
@@ -2534,15 +2535,16 @@ protected:
 	enum {
 		USAGE_CONSUMER_AC_PAN	= 0x000C0238,
 	};
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+#define USB_SHORT_XFER_OK USBD_SHORT_XFER_OK
+#endif
+
 #if defined(__OpenBSD__)
-	enum {
-		HUP_LEDS		= HUP_LED,
-		USB_SHORT_XFER_OK	= USBD_SHORT_XFER_OK,
-	};
-	static uint16_t HID_USAGE(UsageID d) { return d & 0xFFFF; }
+#defined HUP_LEDS HUP_LED
 #endif
 	enum {
 #if !defined(__OpenBSD__)
+//MBN?
 		HUL_NUM_LOCK	= 0x0001,
 		HUL_CAPS_LOCK	= 0x0002,
 		HUL_SCROLL_LOCK	= 0x0003,
@@ -3033,8 +3035,8 @@ USBHIDBase::handle_mouse_button(
 				stdbuttons &= ~mask;
 			r.handle_mouse_button(modifiers(), TranslateStdButton(button), down);
 		}
-	} else
-		/* Ignore out of range button. */ ;
+	}
+	/* else ignore out of range button. */
 }
 
 inline
@@ -3054,8 +3056,8 @@ USBHIDBase::handle_key(
 			newkeys.insert(ident);
 		else
 			newkeys.erase(ident);
-	} else
-		/* Ignore out of range key. */ ;
+	}
+	/* else ignore out of range key. */
 }
 
 inline
@@ -3130,8 +3132,8 @@ USBHIDBase::handle_input_events(
 			||  (HID_USAGE2(HUP_CONSUMER, 0) <= ident && HID_USAGE2(HUP_CONSUMER, 0xFFFF) >= ident)
 			) {
 				handle_key(seen_keyboard, newkeys, ident, down);
-			} else
-				/* Ignore out of range button/key. */ ;
+			}
+			/* else ignore out of range button/key. */
 		}
 
 		std::memmove(input_buffer, input_buffer + report.bytes, sizeof input_buffer - report.bytes),
@@ -3692,9 +3694,9 @@ PS2Mouse::handle_input_events(
 	}
 }
 
-#elif defined(__FreeBSD__) || defined (__DragonFly__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__) || defined (__DragonFly__) || defined(__OpenBSD__) || defined (__NetBSD__)
 
-/* FreeBSD/TrueOS/DragonFly BSD HIDs ****************************************
+/* BSD HIDs *****************************************************************
 // **************************************************************************
 */
 
@@ -3756,6 +3758,25 @@ protected:
 	void set_pressed(uint8_t code, bool v) { pressed[code] = v; }
 };
 
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+class WSConsHIDBase :
+	public HIDBase
+{
+public:
+	WSConsHIDBase(const KeyboardMap &, bool);
+	~WSConsHIDBase() {}
+
+	int query_input_fd() const { return device.get(); }
+	void handle_input_events(Realizer &);
+protected:
+	FileDescriptorOwner device;
+	struct wscons_event buffer[16];
+	int offset;
+
+	virtual void event_callback(Realizer &, u_int, int) = 0;
+};
+#endif
+
 #if defined(__FreeBSD__) || defined(__DragonFly__)
 class ATKeyboard :
 	public ATKeyboardBase
@@ -3768,6 +3789,31 @@ public:
 protected:
 	termios original_attr;
 	long kbmode;
+	void save_and_set_mode();
+	void restore();
+};
+#endif
+
+#if defined(__OpenBSD__) || defined (__NetBSD__)
+class WSKeyboard :
+	public WSConsHIDBase
+{
+public:
+	WSKeyboard(const KeyboardMap &, bool);
+	~WSKeyboard();
+
+	void set_LEDs();
+	void reset(int);
+protected:
+	void event_callback(Realizer &, u_int, int);
+
+	bool pressed[65536];	///< used for determining auto-repeat keypresses
+	bool is_pressed(uint16_t code) const { return pressed[code]; }
+	void set_pressed(uint16_t code, bool v) { pressed[code] = v; }
+
+	termios original_attr;
+	long kbmode;
+	u_int wskbd_type;
 	void save_and_set_mode();
 	void restore();
 };
@@ -3829,6 +3875,32 @@ private:
 }; 
 #endif
 
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+class WSMouse :
+	public WSConsHIDBase
+{
+public:
+	WSMouse(const KeyboardMap &);
+	~WSMouse();
+
+	void set_input_fd(int);
+protected:
+	void event_callback(Realizer &, u_int, int);
+
+	termios original_attr;
+	struct wsmouse_repeat original_repeat;
+	struct wsmouse_calibcoords original_calibcoords;
+	void save_and_set_wsmouse_state();
+	void restore();
+
+	bool has_abs_coords;
+	int minx, miny;
+	int maxx, maxy;
+
+	static int TranslateStdButton(const unsigned short button);
+};
+#endif
+
 }
 
 inline
@@ -3858,7 +3930,7 @@ USBHID::read_description()
 }
 #endif
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 bool 
 USBHID::read_description()
 {
@@ -3998,6 +4070,34 @@ ATKeyboardBase::handle_input_events(
 	}
 }
 
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+inline
+WSConsHIDBase::WSConsHIDBase(
+	const KeyboardMap & km,
+	bool n
+) :
+	HIDBase(km, n),
+	device(-1),
+	offset(0U)
+{
+}
+
+inline
+void
+WSConsHIDBase::handle_input_events(
+	Realizer & r
+) {
+	const int n(read(device.get(), reinterpret_cast<char *>(buffer) + offset * sizeof(struct wscons_event), sizeof buffer - offset * sizeof(struct wscons_event)));
+	if (0 < n) return;
+
+	offset += n;
+	for (; offset > 0; offset--) {
+		event_callback(r, buffer[0].type, buffer[0].value);
+		std::memmove(buffer, buffer + sizeof(struct wscons_event), sizeof buffer - sizeof(struct wscons_event));
+	}
+}
+#endif
+
 #if defined(__FreeBSD__) || defined(__DragonFly__)
 ATKeyboard::ATKeyboard(
 	const KeyboardMap & km,
@@ -4048,6 +4148,140 @@ ATKeyboard::restore()
 }
 #endif
 
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+WSKeyboard::WSKeyboard(
+	const KeyboardMap & km,
+	bool n
+) :
+	WSConsHIDBase(km, n),
+	original_attr(),
+	kbmode()
+{
+	save_and_set_mode();
+}
+
+WSKeyboard::~WSKeyboard()
+{
+	restore();
+}
+
+inline
+void
+WSKeyboard::reset(
+	int n
+) {
+	restore();
+	device.reset(n);
+	save_and_set_mode();
+}
+
+inline
+void 
+WSKeyboard::set_LEDs(
+) {
+	if (-1 != device.get()) {
+		const int newled((caps_LED() ? WSKBD_LED_CAPS : 0)|(num_LED() ? WSKBD_LED_NUM : 0)|(scroll_LED() ? WSKBD_LED_SCROLL : 0)|(compose_LED() ? WSKBD_LED_COMPOSE : 0));
+		ioctl(device.get(), WSKBDIO_SETLEDS, newled);
+	}
+}
+
+void
+WSKeyboard::event_callback(
+	Realizer & r,
+	u_int type,
+	int value
+) {
+	uint16_t index;
+
+	switch (wskbd_type) {
+#if defined (__OpenBSD__)
+		case WSKBD_TYPE_PC_XT:
+		case WSKBD_TYPE_PC_AT:
+		case WSKBD_TYPE_USB:
+			index = wscons_xt_keycode_to_keymap_index(value);
+			break;
+		case WSKBD_TYPE_ADB:
+		case WSKBD_TYPE_SUN:
+		case WSKBD_TYPE_SUN5:
+		case WSKBD_TYPE_HIL:
+			index = rawkey_keycode_to_keymap_index(value);
+			break;
+		case WSKBD_TYPE_SGI:
+			index = wscons_sgi_keycode_to_keymap_index(value);
+			break;
+#elif defined (__NetBSD__)
+		case WSKBD_TYPE_PC_XT:
+		case WSKBD_TYPE_PC_AT:
+		case WSKBD_TYPE_USB:
+		case WSKBD_TYPE_HPC_KBD:
+		case WSKBD_TYPE_HPC_BTN:
+		case WSKBD_TYPE_HIL:
+		case WSKBD_TYPE_BLUETOOTH:
+		case WSKBD_TYPE_ZAURUS:
+		case WSKBD_TYPE_LUNA:
+			index = wscons_xt_keycode_to_keymap_index(value);
+			break;
+		case WSKBD_TYPE_ADB:
+			index = wscons_adb_keycode_to_keymap_index(value);
+			break;
+		case WSKBD_TYPE_SUN:
+		case WSKBD_TYPE_SUN5:
+			index = wscons_sun_keycode_to_keymap_index(value);
+			break;
+		case WSKBD_TYPE_SGI:
+			index = wscons_sgi_keycode_to_keymap_index(value);
+			break;
+		case WSKBD_TYPE_EWS4800:
+			index = wscons_ews_keycode_to_keymap_index(value);
+			break;
+#endif
+		default:
+			return; // Keyboard type not recognized
+	}
+	if (index == 0xFFFF)
+		return; // Scancode not recognized
+
+	switch (type) {
+		case WSCONS_EVENT_KEY_UP:
+			set_pressed(value, true);
+			handle_keyboard(r, index, 0U);
+			break;
+		case WSCONS_EVENT_KEY_DOWN:
+			set_pressed(value, false);
+			handle_keyboard(r, index, is_pressed(value) ? 2U : 1U);
+			break;
+		default:
+			// This is an event type we do not handle
+			break;
+	}
+}
+
+void
+WSKeyboard::save_and_set_mode()
+{
+	if (-1 != device.get()) {
+		// For the duration, the line discipline needs to be set to raw mode.
+		if (0 <= tcgetattr_nointr(device.get(), original_attr))
+			tcsetattr_nointr(device.get(), TCSADRAIN, make_raw(original_attr));
+		// And beneath that the keyboard needs to be set to keycode mode.
+		ioctl(device.get(), WSKBDIO_GETMODE, &kbmode);
+		ioctl(device.get(), WSKBDIO_SETMODE, WSKBD_RAW);
+		ioctl(device.get(), WSKBDIO_GTYPE, &wskbd_type);
+		for (unsigned i(0U); i < sizeof pressed/sizeof *pressed; ++i)
+			pressed[i] = false;
+	}
+}
+
+void
+WSKeyboard::restore()
+{
+	if (-1 != device.get()) {
+		ioctl(device.get(), WSKBDIO_SETMODE, kbmode);
+		tcsetattr_nointr(device.get(), TCSADRAIN, original_attr);
+	}
+}
+#endif
+
 KernelVT::KernelVT(
 	const KeyboardMap & km, 
 	bool n,
@@ -4079,21 +4313,22 @@ KernelVT::save_and_set_mode()
 		struct vt_mode m = { VT_PROCESS, 0, static_cast<short>(release_signal), static_cast<char>(acquire_signal), static_cast<char>(acquire_signal) };
 		ioctl(device.get(), VT_SETMODE, &m);
 		// Tell the terminal emulator not to draw its character buffer, with KD_GRAPHICS or equivalent.
-#if defined(__OpenBSD__)
-		// OpenBSD bug: There's no API for finding out the prior drawing setting, so we always restore to KD_TEXT.
-		kdmode = KD_TEXT;
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+		ioctl(device.get(), WSDISPLAYIO_GMODE, &kdmode);
+		ioctl(device.get(), WSDISPLAYIO_SMODE, WSDISPLAYIO_MODE_DUMBFB);
 #else
 		ioctl(device.get(), KDGETMODE, &kdmode);
-#endif
 		ioctl(device.get(), KDSETMODE, KD_GRAPHICS);
+#endif
 		// The line discipline needs to be set to raw mode for the duration.
 		if (0 <= tcgetattr_nointr(device.get(), original_attr))
 			tcsetattr_nointr(device.get(), TCSADRAIN, make_raw(original_attr));
 		// And beneath that the keyboard needs to be set to keycode mode.
-		ioctl(device.get(), KDGKBMODE, &kbmode);
-#if defined(__OpenBSD__)
-		ioctl(device.get(), KDSKBMODE, K_RAW);
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+		ioctl(device.get(), WSKBDIO_GETMODE, &kbmode);
+		ioctl(device.get(), WSKBDIO_SETMODE, WSKBD_RAW);
 #else
+		ioctl(device.get(), KDGKBMODE, &kbmode);
 		ioctl(device.get(), KDSKBMODE, K_CODE);
 #endif
  	}
@@ -4103,9 +4338,17 @@ void
 KernelVT::restore()
 {
 	if (-1 != device.get()) {
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+		ioctl(device.get(), WSKBDIO_SETMODE, WSKBD_RAW);
+#else
 		ioctl(device.get(), KDSKBMODE, kbmode);
+#endif
 		tcsetattr_nointr(device.get(), TCSADRAIN, original_attr);
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+		ioctl(device.get(), WSDISPLAYIO_SMODE, kdmode);
+#else
 		ioctl(device.get(), KDSETMODE, kdmode);
+#endif
 		ioctl(device.get(), VT_SETMODE, &vtmode);
 	}
 }
@@ -4275,7 +4518,7 @@ SysMouse::handle_input_events(
 			}
 		}
 		stdbuttons = newstdbuttons;
-	       	if (ext) {
+		if (ext) {
 			const unsigned newextbuttons(buffer[7] & MOUSE_SYS_EXTBUTTONS);
 			for (unsigned short button(0U); button < (MOUSE_SYS_MAXBUTTON - MOUSE_MSC_MAXBUTTON); ++button) {
 				const unsigned long mask(1UL << button);
@@ -4334,6 +4577,136 @@ SysMouse::restore()
 }
 #endif
 
+#if defined(__OpenBSD__) || defined(__NetBSD__)
+inline
+WSMouse::WSMouse(
+	const KeyboardMap & km
+) :
+	WSConsHIDBase(km, false),
+	original_attr(),
+	has_abs_coords(false),
+	minx(), miny(),
+	maxx(), maxy()
+{
+}
+
+WSMouse::~WSMouse()
+{
+	restore();
+}
+
+inline
+void
+WSMouse::set_input_fd(
+	int n
+) {
+	restore();
+	device.reset(n);
+	save_and_set_wsmouse_state();
+}
+
+inline
+int
+WSMouse::TranslateStdButton(
+	const unsigned short button
+) {
+	switch (button) {
+		case 0U:	return 0;
+		case 1U:	return 1;
+		case 2U:	return 2;
+		default:	return -1;
+	}
+};
+
+void
+WSMouse::event_callback(
+	Realizer & r,
+	u_int type,
+	int value
+) {
+	switch (type) {
+		case WSCONS_EVENT_MOUSE_UP:
+			r.handle_mouse_button(modifiers(), TranslateStdButton(value), false);
+			break;
+		case WSCONS_EVENT_MOUSE_DOWN:
+			r.handle_mouse_button(modifiers(), TranslateStdButton(value), true);
+			break;
+		case WSCONS_EVENT_MOUSE_DELTA_X:
+			r.handle_mouse_relpos(modifiers(), r.AXIS_X, value);
+			break;
+		case WSCONS_EVENT_MOUSE_DELTA_Y:
+			r.handle_mouse_relpos(modifiers(), r.AXIS_Y, value);
+			break;
+		case WSCONS_EVENT_MOUSE_DELTA_Z:
+			r.handle_mouse_relpos(modifiers(), r.V_SCROLL, value);
+			break;
+		case WSCONS_EVENT_MOUSE_DELTA_W:
+			r.handle_mouse_relpos(modifiers(), r.H_SCROLL, value);
+			break;
+		case WSCONS_EVENT_MOUSE_ABSOLUTE_X:
+			if (has_abs_coords)
+				r.handle_mouse_abspos(modifiers(), r.AXIS_X, minx + value, maxx - minx);
+			break;
+		case WSCONS_EVENT_MOUSE_ABSOLUTE_Y:
+			if (has_abs_coords)
+				r.handle_mouse_abspos(modifiers(), r.AXIS_Y, miny + value, maxy - miny);
+			break;
+		default:
+			// This is an event type we do not handle
+			break;
+	}
+}
+
+// The mouse coordinates must be set to raw mode and repeating turned off
+void
+WSMouse::save_and_set_wsmouse_state()
+{
+	if (-1 != device.get()) {
+		// Event version must be set to WSMOUSE_EVENT_VERSION
+		int ver = WSMOUSE_EVENT_VERSION;
+		ioctl(device.get(), WSMOUSEIO_SETVERSION, &ver);
+
+		struct wsmouse_calibcoords calibcoords;
+		if (ioctl(device.get(), WSMOUSEIO_GCALIBCOORDS, &calibcoords) != 0) {
+			original_calibcoords = calibcoords;
+			// Assume not a touchscreen device
+			has_abs_coords = false;
+		} else {
+			original_calibcoords = calibcoords;
+			// If not set to raw, then set to raw
+			if (calibcoords.samplelen != WSMOUSE_CALIBCOORDS_RESET) {
+				calibcoords.samplelen = WSMOUSE_CALIBCOORDS_RESET;
+				ioctl(device.get(), WSMOUSEIO_SCALIBCOORDS, &calibcoords);
+			}
+			has_abs_coords = true;
+			minx = calibcoords.minx;
+			miny = calibcoords.miny;
+			maxx = calibcoords.maxx;
+			maxy = calibcoords.maxy;
+		}
+
+		struct wsmouse_repeat repeat;
+		ioctl(device.get(), WSMOUSEIO_GETREPEAT, &repeat);
+		original_repeat = repeat;
+		repeat.wr_buttons = 0U;
+		ioctl(device.get(), WSMOUSEIO_SETREPEAT, &repeat);
+
+		if (0 <= tcgetattr_nointr(device.get(), original_attr))
+			tcsetattr_nointr(device.get(), TCSADRAIN, make_raw(original_attr));
+	}
+}
+
+void
+WSMouse::restore()
+{
+	if (-1 != device.get()) {
+		ioctl(device.get(), WSMOUSEIO_SCALIBCOORDS, &original_calibcoords);
+		ioctl(device.get(), WSMOUSEIO_SETREPEAT, &original_repeat);
+		tcsetattr_nointr(device.get(), TCSADRAIN, original_attr);
+	}
+}
+#endif
+
 #else
 
 #error "Don't know how to handle HIDs for your operating system."
@@ -4351,7 +4724,7 @@ public:
 	~HIDList();
 #if defined(__LINUX__) || defined(__linux__)
 	HID & add(const KeyboardMap & km, bool n) { HID * p(new HID(km, n)); push_back(p); return *p; }
-#elif defined(__FreeBSD__) || defined (__DragonFly__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__) || defined (__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	GenericUSB & add_ugen(const KeyboardMap & km, bool n) { GenericUSB * p(new GenericUSB(km, n)); push_back(p); return *p; }
 	USBHID & add_uhid(const KeyboardMap & km, bool n) { USBHID * p(new USBHID(km, n)); push_back(p); return *p; }
 #endif
@@ -4379,7 +4752,7 @@ console_fb_realizer [[gnu::noreturn]] (
 	const char * keyboard_map_filename(0);
 #if defined(__LINUX__) || defined(__linux__)
 	unsigned long kernel_vt_number(0U);
-#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	const char * kernel_vt_filename(0);
 #endif
 #if defined(__LINUX__) || defined(__linux__)
@@ -4387,6 +4760,9 @@ console_fb_realizer [[gnu::noreturn]] (
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
 	const char * atkeyboard_filename(0);
 	const char * sysmouse_filename(0);
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+	const char * wskbd_filename(0);
+	const char * wsmouse_filename(0);
 #endif
 	bool limit_80_columns(false);
 	std::list<std::string> input_filenames;
@@ -4398,18 +4774,18 @@ console_fb_realizer [[gnu::noreturn]] (
 	unsigned long quadrant(3U);
 
 	try {
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 		bool has_kernel_vt(false);
 #endif
 		popt::bool_definition bold_as_colour_option('\0', "bold-as-colour", "Forcibly render boldface as a colour brightness change.", bold_as_colour);
 #if defined(__LINUX__) || defined(__linux__)
 		popt::unsigned_number_definition kernel_vt_number_option('\0', "kernel-vt-number", "number", "Use the given kernel virtual terminal.", kernel_vt_number, 10);
-#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 		popt::bool_definition limit_80_columns_option('\0', "80-columns", "Limit to no wider than 80 columns.", limit_80_columns);
 		popt::bool_definition kernel_vt_option('\0', "kernel-vt", "Use a kernel virtual terminal device.", has_kernel_vt);
 #endif
 		popt::string_list_definition input_option('\0', "input", "device", "Use the this input device.", input_filenames);
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 		popt::string_pair_list_definition ugen_input_option('\0', "ugen-input", "control function", "Use the this ugen input control and function device pair.", ugen_input_filenames);
 #endif
 #if defined(__LINUX__) || defined(__linux__)
@@ -4417,6 +4793,9 @@ console_fb_realizer [[gnu::noreturn]] (
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
 		popt::string_definition atkeyboard_option('\0', "atkeyboard", "device", "Use this atkbd input device.", atkeyboard_filename);
 		popt::string_definition sysmouse_option('\0', "sysmouse", "device", "Use this sysmouse input device.", sysmouse_filename);
+#elif defined(__OpenBSD__) || defined (__NetBSD__)
+		popt::string_definition wskbd_option('\0', "wskbd", "device", "Use this wscons keyboard input device.", wskbd_filename);  
+		popt::string_definition wsmouse_otpion('\0', "wsmouse", "device", "Use this wscons mouse input device.", wsmouse_filename);
 #endif
 		popt::bool_definition initial_numlock_option('\0', "initial-numlock", "Turn NumLock on, initially.", initial_numlock);
 		popt::string_definition keyboard_map_option('\0', "keyboard-map", "filename", "Use this keyboard map.", keyboard_map_filename);
@@ -4446,7 +4825,7 @@ console_fb_realizer [[gnu::noreturn]] (
 			&input_option,
 #if defined(__LINUX__) || defined(__linux__)
 			&kernel_vt_number_option,
-#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 			&kernel_vt_option,
 			&limit_80_columns_option,
 			&ugen_input_option,
@@ -4456,6 +4835,9 @@ console_fb_realizer [[gnu::noreturn]] (
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
 			&atkeyboard_option,
 			&sysmouse_option,
+#elif defined(__OpenBSD__) || defined(__NetBSD)
+			&wskbd_option,
+			&wsmouse_option,
 #endif
 			&initial_numlock_option,
 			&keyboard_map_option,
@@ -4488,7 +4870,8 @@ console_fb_realizer [[gnu::noreturn]] (
 		p.process(true /* strictly options before arguments */);
 		args = new_args;
 		if (p.stopped()) throw EXIT_SUCCESS;
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
+// TTY variable might not be set?
 		if (has_kernel_vt)
 			kernel_vt_filename = envs.query("TTY");
 #else
@@ -4512,7 +4895,7 @@ console_fb_realizer [[gnu::noreturn]] (
 	}
 	const char * fb_filename(args.front());
 	args.erase(args.begin());
-#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	const char * fb_filename(0);
 	if (args.empty()) {
 		if (kernel_vt_filename)
@@ -4539,6 +4922,9 @@ console_fb_realizer [[gnu::noreturn]] (
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
 	ATKeyboard atkbd(keyboard_map, initial_numlock);
 	SysMouse sysmou(keyboard_map);
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+	WSKeyboard wskbd(keyboard_map, initial_numlock);
+	WSMouse wsmouse(keyboard_map);
 #endif
 
 	// Open non-devices first, so that abends during setup don't leave hardware in strange states.
@@ -4591,11 +4977,16 @@ console_fb_realizer [[gnu::noreturn]] (
 	if (!input_filenames.empty()
 #if defined(__LINUX__) || defined(__linux__)
 	|| ps2mouse_filename
-#elif defined(__FreeBSD__) || defined(__DragonFly__)
-	|| atkeyboard_filename || sysmouse_filename || !ugen_input_filenames.empty()
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined (__NetBSD__)
+	|| !ugen_input_filenames.empty()
+#if defined(__FreeBSD__) || defined(__DragonFly__)
+	|| atkeyboard_filename || sysmouse_filename
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+	|| wskbd_filename || wsmouse_filename
+#endif
 #endif
 	) {
-       		input_fd.reset(open_writeexisting_at(vt_dir_fd.get(), "input"));
+		input_fd.reset(open_writeexisting_at(vt_dir_fd.get(), "input"));
 		if (0 > input_fd.get()) {
 			const int error(errno);
 			std::fprintf(stderr, "%s: FATAL: %s/%s: %s\n", prog, vt_dirname, "input", std::strerror(error));
@@ -4654,7 +5045,7 @@ console_fb_realizer [[gnu::noreturn]] (
 		}
 		append_event(ip, input.query_input_fd(), EVFILT_READ, EV_ADD|EV_DISABLE, 0, 0, 0);
 	}
-#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	KernelVT kvt(keyboard_map, initial_numlock, SIGUSR1, SIGUSR2);
 	if (kernel_vt_filename) {
 		FileDescriptorOwner fd(open_readwriteexisting_at(AT_FDCWD, kernel_vt_filename));
@@ -4761,12 +5152,38 @@ console_fb_realizer [[gnu::noreturn]] (
 		sysmou.set_input_fd(fd1.release());
 		append_event(ip, sysmou.query_input_fd(), EVFILT_READ, EV_ADD|EV_DISABLE, 0, 0, 0);
 	}
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+	if (wskbd_filename) {
+		FileDescriptorOwner fd1(open_readwriteexisting_at(AT_FDCWD, wskbd_filename));
+		if (0 > fd1.get()) {
+			const int error(errno);
+			std::fprintf(stderr, "%s: FATAL: %s: %s\n", prog, wskbd_filename, std::strerror(error));
+			throw EXIT_FAILURE;
+		}
+		wskbd.reset(fd1.release());
+		append_event(ip, wskbd.query_input_fd(), EVFILT_READ, EV_ADD|EV_DISABLE, 0, 0, 0);
+	}
+	if (wsmouse_filename) {
+		FileDescriptorOwner fd1(open_readwriteexisting_at(AT_FDCWD, wsmouse_filename));		
+		if (0 > fd1.get()) {
+			const int error(errno);
+			std::fprintf(stderr, "%s: FATAL: %s: %s\n", prog, wsmouse_filename, std::strerror(error));
+			throw EXIT_FAILURE;
+		}
+		wsmouse.set_input_fd(fd1.release());
+		append_event(ip, wsmouse.query_input_fd(), EVFILT_READ, EV_ADD|EV_DISABLE, 0, 0, 0);
+	}
 #endif
 	const bool has_pointer(!inputs.empty()
 #if defined(__LINUX__) || defined(__linux__)
 	|| ps2mouse_filename
-#elif defined(__FreeBSD__) || defined(__DragonFly__)
-	|| sysmouse_filename || !ugen_input_filenames.empty()
+#elif defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined (__NetBSD__)
+	|| !ugen_input_filenames.empty()
+#if defined(__FreeBSD__) || defined(__DragonFly__)
+	|| sysmouse_filename
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+	|| wsmouse_filename
+#endif
 #endif
 	);
 
@@ -4812,11 +5229,12 @@ console_fb_realizer [[gnu::noreturn]] (
 	} else
 		usr2_signalled = true;
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
+//MBN?
 	if (0 <= kvt.query_input_fd())
 		usr2_signalled = kvt.is_active();
 	else
 		usr2_signalled = true;
-#elif defined(__OpenBSD__)
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
 	usr2_signalled = true;
 #endif
 
@@ -4831,6 +5249,7 @@ console_fb_realizer [[gnu::noreturn]] (
 			usr1_signalled = false;
 			if (active) {
 #if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
+//MBN?
 				if (0 <= kvt.query_input_fd())
 					append_event(ip, kvt.query_input_fd(), EVFILT_READ, EV_DISABLE, 0, 0, 0);
 #endif
@@ -4842,6 +5261,11 @@ console_fb_realizer [[gnu::noreturn]] (
 					append_event(ip, atkbd.query_input_fd(), EVFILT_READ, EV_DISABLE, 0, 0, 0);
 				if (0 <= sysmou.query_input_fd())
 					append_event(ip, sysmou.query_input_fd(), EVFILT_READ, EV_DISABLE, 0, 0, 0);
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+				if (0 <= wskbd.query_input_fd())
+					append_event(ip, wskbd.query_input_fd(), EVFILT_READ, EV_DISABLE, 0, 0, 0);
+				if (0 <= wsmouse.query_input_fd())
+					append_event(ip, wsmouse.query_input_fd(), EVFILT_READ, EV_DISABLE, 0, 0, 0);
 #endif
 				for (HIDList::iterator i(inputs.begin()); inputs.end() != i; ++i) {
 					HID & input(**i);
@@ -4869,10 +5293,15 @@ console_fb_realizer [[gnu::noreturn]] (
 					append_event(ip, kvt.query_input_fd(), EVFILT_READ, EV_ENABLE, 0, 0, 0);
 				}
 #endif
-#if defined(__FreeBSD__) || defined (__DragonFly__)
+#if defined(__FreeBSD__) || defined(__DragonFly__)
 				if (atkbd.query_dirty_LEDs()) {
 					atkbd.set_LEDs();
 					atkbd.clean_LEDs();
+				}
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+				if (wskbd.query_dirty_LEDs()) {
+					wskbd.set_LEDs();
+					wskbd.clean_LEDs();
 				}
 #endif
 				for (HIDList::iterator j(inputs.begin()); inputs.end() != j; ++j) {
@@ -4890,6 +5319,11 @@ console_fb_realizer [[gnu::noreturn]] (
 					append_event(ip, atkbd.query_input_fd(), EVFILT_READ, EV_ENABLE, 0, 0, 0);
 				if (0 <= sysmou.query_input_fd())
 					append_event(ip, sysmou.query_input_fd(), EVFILT_READ, EV_ENABLE, 0, 0, 0);
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+				if (0 <= wskbd.query_input_fd())
+					append_event(ip, wskbd.query_input_fd(), EVFILT_READ, EV_ENABLE, 0, 0, 0);
+				if (0 <= wsmouse.query_input_fd())
+					append_event(ip, wsmouse.query_input_fd(), EVFILT_READ, EV_ENABLE, 0, 0, 0);
 #endif
 				for (HIDList::iterator i(inputs.begin()); inputs.end() != i; ++i) {
 					HID & input(**i);
@@ -4903,6 +5337,7 @@ console_fb_realizer [[gnu::noreturn]] (
 				active = true;
 			}
 #if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
+//MBN?
 			if (0 <= kvt.query_input_fd())
 				kvt.acknowledge_switch_to();
 #endif
@@ -4922,6 +5357,7 @@ console_fb_realizer [[gnu::noreturn]] (
 #if defined(__LINUX__) || defined(__linux__)
 			kvt.release();
 #elif defined(__FreeBSD__) || defined (__DragonFly__)
+//MBN?
 			kvt.reset(-1);
 #endif
 			std::fprintf(stderr, "%s: FATAL: %s: %s\n", prog, "kevent", std::strerror(error));
@@ -4951,6 +5387,7 @@ console_fb_realizer [[gnu::noreturn]] (
 				case EVFILT_READ:
 					if (0 <= static_cast<int>(e.ident)) {
 #if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__)
+//MBN?
 						if (kvt.query_input_fd() == static_cast<int>(e.ident)) 
 							kvt.handle_input_events(realizer);
 #endif
@@ -4962,6 +5399,11 @@ console_fb_realizer [[gnu::noreturn]] (
 							atkbd.handle_input_events(realizer);
 						if (sysmou.query_input_fd() == static_cast<int>(e.ident)) 
 							sysmou.handle_input_events(realizer);
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+						if (wskbd.query_input_fd() == static_cast<int>(e.ident))
+							wskbd.handle_input_events(realizer);
+						if (wsmouse.query_input_fd() == static_cast<int>(e.ident))
+							wsmouse.handle_input_events(realizer);
 #endif
 						for (HIDList::iterator j(inputs.begin()); inputs.end() != j; ++j) {
 							HID & input(**j);
@@ -4996,7 +5438,8 @@ console_fb_realizer [[gnu::noreturn]] (
 			kvt.set_LEDs();
 			kvt.clean_LEDs();
 		}
-#elif defined(__FreeBSD__) || defined (__DragonFly__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
+//MBN? first if statement
 		if (kvt.query_dirty_LEDs()) {
 			kvt.set_LEDs();
 			kvt.clean_LEDs();
@@ -5004,6 +5447,11 @@ console_fb_realizer [[gnu::noreturn]] (
 		if (atkbd.query_dirty_LEDs()) {
 			atkbd.set_LEDs();
 			atkbd.clean_LEDs();
+		}
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+		if (wskbd.query_dirty_LEDs()) {
+			wskbd.set_LEDs();
+			wskbd.clean_LEDs();
 		}
 #endif
 		for (HIDList::iterator j(inputs.begin()); inputs.end() != j; ++j) {

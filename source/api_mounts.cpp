@@ -81,7 +81,7 @@ static const struct iovec shm[] = {
 	MAKE_IOVEC("mode"),		MAKE_IOVEC("01777"),
 	MAKE_IOVEC("size"),		MAKE_IOVEC("50%"),
 };
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 static const struct iovec proc[] = {
 	FSTYPE,				MAKE_IOVEC("procfs"),
 	FSPATH,				MAKE_IOVEC("/proc"),
@@ -104,6 +104,10 @@ static const struct iovec shm[] = {
 	FSPATH,				MAKE_IOVEC("/run/shm"),
 	MAKE_IOVEC("size"),		MAKE_IOVEC("50%"),
 };
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+// None
+#else
+#error "Don't know how to create API mounts for your operating system."
 #endif
 
 #define MAKE_DATA(x) # x, const_cast<struct iovec *>(x), sizeof x/sizeof *x
@@ -121,12 +125,16 @@ static const struct api_mount data[] =
 	{	MAKE_DATA(pts),		0U,	MS_NOSUID|MS_STRICTATIME|MS_NOEXEC		},
 	{	MAKE_DATA(run),		0U,	MS_NOSUID|MS_STRICTATIME|MS_NODEV		},
 	{	MAKE_DATA(shm),		0U,	MS_NOSUID|MS_STRICTATIME|MS_NOEXEC|MS_NODEV	},
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 	{	MAKE_DATA(proc),	0U,	MNT_NOSUID					},
 	{	MAKE_DATA(dev),		0U,	MNT_NOSUID|MNT_NOEXEC				},
 	{	MAKE_DATA(fds),		0U,	MNT_NOSUID|MNT_NOEXEC				},
 	{	MAKE_DATA(run),		0U,	MNT_NOSUID					},
 	{	MAKE_DATA(shm),		0U,	MNT_NOSUID|MNT_NOEXEC				},
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+	// None
+#else
+#error "Don't know how to create API mounts for your operating system."
 #endif
 };
 

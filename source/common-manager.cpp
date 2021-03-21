@@ -406,7 +406,7 @@ initialize_system_clock_timezone()
 		settimeofday(ztv, &tz);	// Prevent the next call from adjusting the system clock.
 	// Set the RTC/FAT local time offset, and (if not UTC) adjust the system clock from local-time-as-if-UTC to UTC.
 	tz.tz_minuteswest = seconds_west / 60;
-	settimeofday(ztv, &tz);		
+	settimeofday(ztv, &tz);
 }
 
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
@@ -473,7 +473,36 @@ initialize_system_clock_timezone(
 		settimeofday(ztv, &tz);
 }
 
+#elif defined(__OpenBSD__)
+
+// Clock offset set in sysctl.conf
+
 #elif defined(__NetBSD__)
+
+// Nosh-specific: If file /etc/rtc_localtime exists, clock runs in local time
+
+static inline
+bool
+hwclock_runs_in_UTC()
+{
+	return 0 > access("/etc/rtc_localtime", F_OK);
+}
+
+static inline
+void
+initialize_system_clock_timezone() 
+{
+	const bool utc(hwclock_runs_in_UTC());
+	const std::time_t now(std::time(0));
+	const struct tm *l(localtime(&now));
+	const int minutes_east(-l->tm_gmtoff / 60);	// It is important that this is an int.
+
+	if (!utc)
+		// Adjust the system clock from local-time-as-if-UTC to UTC.
+		sysctlbyname("kern.rtc_offset", 0, 0, &minutes_east, sizeof minutes_east);
+}
+
+#else
 
 #error "Don't know what needs to be done about the system clock."
 
@@ -774,7 +803,9 @@ end_system()
 #if defined(__LINUX__) || defined(__linux__)
 		reboot(RB_POWER_OFF);
 #elif defined(__OpenBSD__)
-		reboot(RB_POWERDOWN);
+		reboot(RB_HALT|RB_POWERDOWN);
+#elif defined(__NetBSD__)
+		reboot(RB_HALT|RB_POWERDOWN, NULL);
 #else
 		reboot(RB_POWEROFF);
 #endif
@@ -782,21 +813,39 @@ end_system()
 	if (fasthalt_signalled) {
 #if defined(__LINUX__) || defined(__linux__)
 		reboot(RB_HALT_SYSTEM);
+#elif defined(__NetBSD__)
+		reboot(RB_HALT, NULL);
 #else
 		reboot(RB_HALT);
 #endif
 	}
 	if (fastreboot_signalled) {
-		reboot(RB_AUTOBOOT);
-	}
-	if (fastpowercycle_signalled) {
-#if defined(RB_POWERCYCLE)
-		reboot(RB_POWERCYCLE);
+#if defined(__NetBSD__)
+		reboot(RB_AUTOBOOT, NULL);
 #else
 		reboot(RB_AUTOBOOT);
 #endif
 	}
+	if (fastpowercycle_signalled) {
+#if defined(RB_POWERCYCLE)
+#if defined(__NetBSD__)
+		reboot(RB_POWERCYCLE, NULL);
+#else
+		reboot(RB_POWERCYCLE);
+#endif
+#else
+#if defined(__NetBSD__)
+		reboot(RB_AUTOBOOT, NULL);
+#else
+		reboot(RB_AUTOBOOT);
+#endif
+#endif
+	}
+#if defined(__NetBSD__)
+	reboot(RB_AUTOBOOT, NULL);
+#else
 	reboot(RB_AUTOBOOT);
+#endif
 }
 
 static
@@ -1331,11 +1380,13 @@ common_manager (
 		0
 	);
 	if (is_system) {
-#if defined(__LINUX__) || defined(__linux__)
+#if defined(__LINUX__) || defined(__linux__) || defined(__NetBSD__)
 		initialize_system_clock_timezone();
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
 		initialize_system_clock_timezone(prog);
-#elif defined(__NetBSD__)
+#elif defined(__OpenBSD__)
+		// Clock offset set in sysctl.conf
+#else
 #error "Don't know what needs to be done about the system clock."
 #endif
 		setup_kernel_api_volumes_and_devices(prog);

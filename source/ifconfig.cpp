@@ -37,9 +37,11 @@ struct prf_ra : public in6_prflags::prf_ra {};
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
 #endif
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 #include <net/if_dl.h>
-#include <net/if_var.h>	
+#if defined(__OpenBSD__)
+#include <net/if_var.h>
+#endif
 #include <netinet/in_var.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
@@ -238,7 +240,7 @@ namespace {
 		{	"lladr",	AF_PACKET	},
 		{	"lladdr",	AF_PACKET	},
 #endif
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 		{	"link",		AF_LINK		},
 		{	"ether",	AF_LINK		},
 		{	"packet",	AF_LINK		},
@@ -252,7 +254,7 @@ namespace {
 		{	"inet6",	AF_INET6	},
 		{	"ip6",		AF_INET6	},
 		{	"ipv6",		AF_INET6	},
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 		{	"nd6",		AF_INET6	},
 #endif
 		{	"local",	AF_LOCAL	},
@@ -392,7 +394,7 @@ namespace {
 				break;
 			}
 #endif
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 			case AF_LINK:
 			{
 				const struct sockaddr_dl & addrl(reinterpret_cast<const struct sockaddr_dl &>(addr));
@@ -425,7 +427,7 @@ namespace {
 	}
 #endif
 
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 	std::ostream &
 	operator << (
 		std::ostream & o,
@@ -437,7 +439,7 @@ namespace {
 			"\n\t\t"
 			"type " << unsigned(d.ifi_type) << " "
 			"linkstate " << unsigned(d.ifi_link_state) << " "
-#if !defined(__OpenBSD__)
+#if !defined(__OpenBSD__) && !defined(__NetBSD__)
 			"physical " << unsigned(d.ifi_physical) << " "
 #endif
 			"baudrate " << d.ifi_baudrate << " "
@@ -551,8 +553,8 @@ namespace {
 					else
 						print(o, "netmask ", *addr);
 				}
-#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
-				// In Linux, FreeBSD, and OpenBSD implementations, ifa_broadaddr and ifa_dstaddr are aliases for a single value.
+#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
+				// In Linux, FreeBSD, OpenBSD, and NetBSD implementations, ifa_broadaddr and ifa_dstaddr are aliases for a single value.
 				if (const sockaddr * addr = a->ifa_broadaddr)
 					print(o, (a->ifa_flags & IFF_BROADCAST ? "broadcast " : a->ifa_flags & IFF_POINTOPOINT ? "dest " : "bdaddr "), *addr);
 #else
@@ -567,7 +569,7 @@ namespace {
 						std::cout << *reinterpret_cast<const rtnl_link_stats *>(data);
 				}
 #endif
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 				if (a->ifa_addr && AF_LINK == a->ifa_addr->sa_family) {
 					if (const void * data = a->ifa_data)
 						std::cout << *reinterpret_cast<const if_data *>(data);
@@ -740,7 +742,7 @@ namespace {
 #if defined(__LINUX__) || defined(__linux__)
 			case AF_PACKET:	addr.ss_len = sizeof(sockaddr_ll); break;
 #endif
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 			case AF_LINK:	addr.ss_len = sizeof(sockaddr_dl); break;
 #endif
 		}
@@ -785,7 +787,7 @@ namespace {
 				break;
 			}
 #endif
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 			case AF_LINK:
 			{
 				struct sockaddr_dl & addrl(reinterpret_cast<struct sockaddr_dl &>(addr));
@@ -1115,7 +1117,7 @@ namespace {
 #if defined(__LINUX__) || defined(__linux__)
 					case AF_PACKET:	initialize_netmask(address_family, netmask, 48); break;
 #endif
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 					case AF_LINK:	initialize_netmask(address_family, netmask, 48); break;
 #endif
 					default:
@@ -1132,8 +1134,8 @@ namespace {
 				calculate_broadcast(broadaddr, address_family, addr, netmask);
 				done_broadaddr = true;
 			}
-#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
-			// In Linux, FreeBSD, and OpenBSD implementations, ifa_broadaddr and ifa_dstaddr are aliases for a single value.
+#if defined(__LINUX__) || defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
+			// In Linux, FreeBSD, OpenBSD and NetBSD implementations, ifa_broadaddr and ifa_dstaddr are aliases for a single value.
 			if (done_destaddr)
 				broadaddr = destaddr;
 			else
@@ -1191,7 +1193,7 @@ namespace {
 }
 #endif
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 namespace {
 
 	inline
@@ -1259,7 +1261,7 @@ namespace {
 // **************************************************************************
 */
 
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__OpenBSD__) || defined(__NetBSD__)
 namespace {
 
 #if false && defined(__OpenBSD__)
@@ -1712,7 +1714,7 @@ namespace {
 }
 #endif
 
-#if defined(__OpenBSD__) || defined(__LINUX__) || defined(__linux__)
+#if defined(__OpenBSD__) || defined(__NetBSD__) || defined(__LINUX__) || defined(__linux__)
 namespace {
 
 	inline

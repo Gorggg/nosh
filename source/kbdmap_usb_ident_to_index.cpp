@@ -5,7 +5,7 @@ For copyright and licensing terms, see the file named COPYING.
 
 #if !defined(__LINUX__) && !defined(__linux__)
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__NetBSD__)
 #include <dev/usb/usb.h>
 #endif
 #include <dev/usb/usbhid.h>

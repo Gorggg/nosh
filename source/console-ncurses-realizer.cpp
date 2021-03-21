@@ -25,11 +25,6 @@ For copyright and licensing terms, see the file named COPYING.
 #include "FileStar.h"
 #include "SignalManagement.h"
 #include "VirtualTerminalBackEnd.h"
-#if defined(__LINUX__) || defined(__linux__)
-#include <ncursesw/curses.h>
-#else
-#include <curses.h>
-#endif
 
 /* Full-screen TUI **********************************************************
 // **************************************************************************
@@ -323,7 +318,9 @@ Realizer::MessageFromNCursesKey (
 		case KEY_CATAB:		return MessageForExtendedKey(EXTENDED_KEY_CLEAR_TABS, 0);
 		case KEY_MOUSE:		// not convertible yet
 		case KEY_RESIZE:	// not applicable
+#if defined(KEY_EVENT)
 		case KEY_EVENT:		// not applicable
+#endif
 		default:
 			return 0;
 	}

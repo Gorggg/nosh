@@ -64,8 +64,12 @@ mount_or_remount_readonly (
 		FROM,			{ const_cast<char *>(where), std::strlen(where) + 1 },
 #if defined(__LINUX__) || defined(__linux__)
 		FSTYPE,			MAKE_IOVEC(""),
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 		FSTYPE,			MAKE_IOVEC("nullfs"),
+#elif defined (__NetBSD__)
+		FSTYPE,			MAKE_IOVEC("null"),
+#else
+#error "Don't know how to create bind mounts on your operating system."
 #endif
 	};
 #if defined(__LINUX__) || defined(__linux__)
@@ -131,8 +135,10 @@ make_read_only_fs (
 
 	if (etc) {
 		mount_or_remount_readonly(prog, "/etc");
-#if !defined(__LINUX__) && !defined(__linux__)
+#if !defined(__LINUX__) && !defined(__linux__) && !defined(__NetBSD__)
 		mount_or_remount_readonly(prog, "/usr/local/etc");
+#elif defined(__NetBSD__)
+		mount_or_remount_readonly(prog, "/usr/pkg/etc");
 #endif
 	}
 	if (os) {
@@ -152,8 +158,10 @@ make_read_only_fs (
 #if defined(__LINUX__) || defined(__linux__)
 		mount_or_remount_readonly(prog, "/home");
 		mount_or_remount_readonly(prog, "/run/user");
-#else
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 		mount_or_remount_readonly(prog, "/usr/home");
+#else
+		mount_or_remount_readonly(prog, "/home");
 #endif
 	}
 	if (sysctl) {
@@ -169,7 +177,7 @@ make_read_only_fs (
 		mount_or_remount_readonly(prog, "/sys/fs/pstore");
 		mount_or_remount_readonly(prog, "/sys/kernel/debug");
 		mount_or_remount_readonly(prog, "/sys/kernel/tracing");
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
 		mount_or_remount_readonly(prog, "/compat/linux/proc/sys");
 		mount_or_remount_readonly(prog, "/compat/linux/sys");
 #endif
